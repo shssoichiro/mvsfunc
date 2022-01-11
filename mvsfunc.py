@@ -689,10 +689,6 @@ def ToYUV(input, matrix=None, css=None, depth=None, sample=None, full=None,
 ##         default: 0
 ##     radius2 {int}: temporal radius of final estimate
 ##         default is the same as "radius1"
-##     profile1 {str}: same as "profile" in BM3D basic estimate
-##         default: "fast"
-##     profile2 {str}: same as "profile" in BM3D final estimate
-##         default is the same as "profile1"
 ################################################################################################################################
 ## Advanced parameters
 ##     refine {int}: refinement times
@@ -755,7 +751,7 @@ def ToYUV(input, matrix=None, css=None, depth=None, sample=None, full=None,
 ##         same as those in Depth()
 ##         *NOTE* no positional arguments, only keyword arguments are accepted
 ################################################################################################################################
-def BM3D(input, sigma=None, radius1=None, radius2=None, profile1=None, profile2=None,
+def BM3D(input, sigma=None, radius1=None, radius2=None,
     refine=None, pre=None, ref=None, psample=None,
     matrix=None, full=None,
     output=None, css=None, depth=None, sample=None,
@@ -866,15 +862,6 @@ def BM3D(input, sigma=None, radius1=None, radius2=None, profile1=None, profile2=
         raise type_error('"radius2" must be an int!')
     elif radius2 < 0:
         raise value_error('valid range of "radius2" is [0, +inf)!')
-    
-    if profile1 is None:
-        profile1 = "fast"
-    elif not isinstance(profile1, str):
-        raise type_error('"profile1" must be a str!')
-    if profile2 is None:
-        profile2 = profile1
-    elif not isinstance(profile2, str):
-        raise type_error('"profile2" must be a str!')
     
     if refine is None:
         refine = 1
@@ -995,16 +982,29 @@ def BM3D(input, sigma=None, radius1=None, radius2=None, profile1=None, profile2=
     elif radius1 < 1:
         # Apply BM3D basic estimate
         # Optional pre-filtered clip for block-matching can be specified by "pre"
-        flt = core.bm3d.Basic(clip, ref=pre, profile=profile1, sigma=sigma,
-            block_size=block_size1, block_step=block_step1, group_size=group_size1,
-            bm_range=bm_range1, bm_step=bm_step1, th_mse=th_mse1, hard_thr=hard_thr, matrix=100)
+        flt = core.bm3dcuda.BM3D(
+            clip,
+            ref=pre,
+            sigma=sigma,
+            block_step=block_step1,
+            bm_range=bm_range1,
+            th_mse=th_mse1,
+            hard_thr=hard_thr,
+            matrix=100,
+        )
     else:
         # Apply V-BM3D basic estimate
         # Optional pre-filtered clip for block-matching can be specified by "pre"
-        flt = core.bm3d.VBasic(clip, ref=pre, profile=profile1, sigma=sigma, radius=radius1,
-            block_size=block_size1, block_step=block_step1, group_size=group_size1,
-            bm_range=bm_range1, bm_step=bm_step1, ps_num=ps_num1, ps_range=ps_range1, ps_step=ps_step1,
-            th_mse=th_mse1, hard_thr=hard_thr, matrix=100).bm3d.VAggregate(radius=radius1, sample=pSType)
+        flt = core.bm3dcuda.BM3D(
+            clip,
+            ref=pre,
+            sigma=sigma,
+            radius=radius1,
+            block_step=block_step1,
+            bm_range=bm_range1,
+            ps_num=ps_num1,
+            ps_range=ps_range1,
+        ).bm3d.VAggregate(radius=radius1, sample=pSType)
         # Shuffle Y plane back if not processed
         if not onlyY and sigma[0] <= 0:
             flt = core.std.ShufflePlanes([clip,flt,flt], [0,1,2], vs.YUV)
@@ -1015,15 +1015,27 @@ def BM3D(input, sigma=None, radius1=None, radius2=None, profile1=None, profile2=
             flt = clip
         elif radius2 < 1:
             # Apply BM3D final estimate
-            flt = core.bm3d.Final(clip, ref=flt, profile=profile2, sigma=sigma,
-                block_size=block_size2, block_step=block_step2, group_size=group_size2,
-                bm_range=bm_range2, bm_step=bm_step2, th_mse=th_mse2, matrix=100)
+            flt = core.bm3dcuda.BM3D(
+                clip,
+                ref=flt,
+                sigma=sigma,
+                block_size=block_size2,
+                block_step=block_step2,
+                group_size=group_size2,
+                bm_range=bm_range2,
+            )
         else:
             # Apply V-BM3D final estimate
-            flt = core.bm3d.VFinal(clip, ref=flt, profile=profile2, sigma=sigma, radius=radius2,
-                block_size=block_size2, block_step=block_step2, group_size=group_size2,
-                bm_range=bm_range2, bm_step=bm_step2, ps_num=ps_num2, ps_range=ps_range2, ps_step=ps_step2,
-                th_mse=th_mse2, matrix=100).bm3d.VAggregate(radius=radius2, sample=pSType)
+            flt = core.bm3dcuda.BM3D(
+                clip,
+                ref=flt,
+                sigma=sigma,
+                radius=radius2,
+                block_step=block_step2,
+                bm_range=bm_range2,
+                ps_num=ps_num2,
+                ps_range=ps_range2,
+            ).bm3d.VAggregate(radius=radius2, sample=pSType)
             # Shuffle Y plane back if not processed
             if not onlyY and sigma[0] <= 0:
                 flt = core.std.ShufflePlanes([clip,flt,flt], [0,1,2], vs.YUV)
